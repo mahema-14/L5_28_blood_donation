@@ -1,10 +1,20 @@
-
+"""Manage blood donors, donations, and blood stock."""
+import os
 import tempfile
 from datetime import date, timedelta
 
 
 donors = []
-stock = {"A+": 0, "A-": 0, "B+": 0, "B-": 0, "O+": 0, "O-": 0, "AB+": 0, "AB-": 0}
+stock = {
+    "A+": 0,
+    "A-": 0,
+    "B+": 0,
+    "B-": 0,
+    "O+": 0,
+    "O-": 0,
+    "AB+": 0,
+    "AB-": 0,
+}
 COMPATIBLE = {
     "A+": ["A+", "A-", "O+", "O-"],
     "B+": ["B+", "B-", "O+", "O-"],
@@ -14,51 +24,70 @@ COMPATIBLE = {
 }
 
 
-def registerDonor(donorName, bloodGroup, age, lastDonation=None, notes=[]):
-    if bloodGroup not in stock:
+def register_donor(donor_name, blood_group, age, last_donation=None,
+                   notes=None):
+    """Register an eligible donor and record any age-related rejection."""
+    if notes is None:
+        notes = []
+
+    if blood_group not in stock:
         raise ValueError("Unknown blood group")
+
     if age < 18 or age > 65:
-        notes.append(donorName + " is not eligible because of age")
+        notes.append(f"{donor_name} is not eligible because of age")
         return False
-    donors.append({"name": donorName, "group": bloodGroup,
-                   "last": lastDonation})
+
+    donors.append({
+        "name": donor_name,
+        "group": blood_group,
+        "last": last_donation,
+    })
     return True
 
 
-def canDonate(donor):
+def can_donate(donor):
+    """Check whether a donor is eligible to donate again."""
     if donor["last"] is None:
         return True
     return date.today() - donor["last"] >= timedelta(days=90)
 
 
-def recordDonation(donorName, units=1):
+def record_donation(donor_name, units=1):
+    """Record a donation if the donor is eligible."""
     for donor in donors:
-        if donor["name"] == donorName and canDonate(donor):
+        if donor["name"] == donor_name and can_donate(donor):
             stock[donor["group"]] += units
             donor["last"] = date.today()
             return True
     return False
 
 
-def unitsFor(patientGroup):
+def units_for(patient_group):
+    """Return the available units compatible with a patient's blood group."""
     try:
-        return sum(stock[group] for group in COMPATIBLE[patientGroup])
-    except Exception:
+        return sum(stock[group] for group in COMPATIBLE[patient_group])
+    except KeyError:
         return 0
 
 
-def isUniversal(bloodGroup):
-    return bloodGroup == "O-" or bloodGroup == "AB+"
+def is_universal(blood_group):
+    """Check whether a blood group is a universal donor or recipient."""
+    return blood_group in {"O-", "AB+"}
 
 
-def lowStock(threshold=2):
-    return [group for group, units in stock.items() if units < threshold]
-
+def low_stock(threshold=2):
+    """Return blood groups whose stock is below the threshold."""
+    return [
+        group
+        for group, units in stock.items()
+        if units < threshold
+    ]
 
 
 def donor_sheet_path():
     """Create and return a secure temporary CSV file path."""
-    file_descriptor, file_path = tempfile.mkstemp(suffix=".csv")
+    file_descriptor, file_path = tempfile.mkstemp(
+        suffix=".csv")
     os.close(file_descriptor)
     return file_path
 
@@ -72,20 +101,30 @@ def notify_donors(phone_list):
 
 
 def main():
-    registerDonor("Arjun", "O+", 25)
-    registerDonor("Priya", "A+", 30, date.today() - timedelta(days=30))
-    registerDonor("Old Donor", "B+", 70)
-    registerDonor("Farah", "O-", 41)
-    recordDonation("Arjun", 2)
-    recordDonation("Priya")
-    recordDonation("Farah")
+    """Demonstrate donor registration and blood stock management."""
+    register_donor("Arjun", "O+", 25)
+    register_donor("Priya", "A+", 30, date.today() - timedelta(days=30))
+    register_donor("Old Donor", "B+", 70)
+    register_donor("Farah", "O-", 41)
+
+    record_donation("Arjun", 2)
+    record_donation("Priya")
+    record_donation("Farah")
+
     print("Stock:", stock)
-    print("Units for an A+ patient:", unitsFor("A+"))
-    print("Units for a Z+ patient:", unitsFor("Z+"))
-    print("Is O- universal?", isUniversal("O-"))
-    print("Low stock groups:", lowStock()) # below 2 units
-    eligible=[donor["name"] for donor in donors if canDonate(donor)]
+    print("Units for an A+ patient:", units_for("A+"))
+    print("Units for a Z+ patient:", units_for("Z+"))
+    print("Is O- universal?", is_universal("O-"))
+    # Display blood groups with fewer than two units.
+    print("Low stock groups:", low_stock())
+
+    eligible = [
+        donor["name"]
+        for donor in donors
+        if can_donate(donor)
+    ]
     print("Donors eligible today:", eligible)
 
 
-main()
+if __name__ == "__main__":
+    main()
